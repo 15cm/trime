@@ -1422,6 +1422,9 @@ public class Trime extends InputMethodService
       try {
         final Window window = getWindow().getWindow();
         @ColorInt final Integer keyboardBackColor = mConfig.getColor("keyboard_back_color");
+        boolean isLightMode = (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)
+                == Configuration.UI_MODE_NIGHT_NO;
+        BarUtils.setNavBarLightMode(window, isLightMode);
         if (keyboardBackColor != null) {
           BarUtils.setNavBarColor(window, keyboardBackColor);
         }
