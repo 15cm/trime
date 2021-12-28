@@ -178,7 +178,7 @@ class TextInputManager private constructor() :
         super.onStartInputView(instance, restarting)
         isComposable = false
         performEnterAsLineBreak = false
-        var tempAsciiMode = false
+        var tempAsciiMode = isAsciiMode
         val inputAttrsRaw = instance.editorInfo!!.inputType
         val keyboardType = when (inputAttrsRaw and InputType.TYPE_MASK_CLASS) {
             InputType.TYPE_CLASS_NUMBER,
@@ -224,9 +224,7 @@ class TextInputManager private constructor() :
     fun onOptionChanged(option: String, value: Boolean) {
         when (option) {
             "ascii_mode" -> {
-                if (!isTempAsciiMode) {
-                    isAsciiMode = value // 切換中西文時保存狀態
-                }
+                isAsciiMode = value // 切換中西文時保存狀態
                 trime.inputFeedbackManager.ttsLanguage =
                     locales[if (value) 1 else 0]
             }
