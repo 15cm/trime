@@ -1032,6 +1032,10 @@ public class Trime extends LifecycleInputMethodService {
     if (VERSION.SDK_INT >= VERSION_CODES.LOLLIPOP) {
       try {
         final Window window = getWindow().getWindow();
+        boolean isLightMode =
+            (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)
+                == Configuration.UI_MODE_NIGHT_NO;
+        BarUtils.setNavBarLightMode(window, isLightMode);
         @ColorInt final Integer keyboardBackColor = getImeConfig().getCurrentColor_("back_color");
         if (keyboardBackColor != null) {
           BarUtils.setNavBarColor(window, keyboardBackColor);
