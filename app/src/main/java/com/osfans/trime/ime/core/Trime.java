@@ -35,6 +35,7 @@ import android.os.Build.VERSION_CODES;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
+import android.text.InputType;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.KeyEvent;
@@ -60,6 +61,7 @@ import com.osfans.trime.clipboard.ClipboardDao;
 import com.osfans.trime.common.ViewUtils;
 import com.osfans.trime.databinding.CompositionRootBinding;
 import com.osfans.trime.databinding.InputRootBinding;
+import com.osfans.trime.draft.DraftDao;
 import com.osfans.trime.ime.enums.WindowsPositionType;
 import com.osfans.trime.ime.keyboard.Event;
 import com.osfans.trime.ime.keyboard.InputFeedbackManager;
@@ -95,6 +97,7 @@ import timber.log.Timber;
 public class Trime extends LifecycleInputMethodService {
   private static Trime self = null;
   private LiquidKeyboard liquidKeyboard;
+  private boolean normalTextEditor;
 
   @NonNull
   private Preferences getPrefs() {
@@ -360,8 +363,11 @@ public class Trime extends LifecycleInputMethodService {
 
         keyboardSwitcher = new KeyboardSwitcher();
 
-        liquidKeyboard = new LiquidKeyboard(this, getImeConfig().getClipboardMaxSize());
+        liquidKeyboard =
+            new LiquidKeyboard(
+                this, getImeConfig().getClipboardLimit(), getImeConfig().getDraftLimit());
         clipBoardMonitor();
+        DraftDao.get();
       } catch (Exception e) {
         super.onCreate();
         e.fillInStackTrace();
@@ -418,7 +424,7 @@ public class Trime extends LifecycleInputMethodService {
   }
 
   private void hideCompositionView() {
-    if (isPopupWindowMovable.equals("once")) {
+    if (isPopupWindowMovable != null && isPopupWindowMovable.equals("once")) {
       popupWindowPos = getImeConfig().getWinPos();
     }
 
@@ -693,10 +699,54 @@ public class Trime extends LifecycleInputMethodService {
     bindKeyboardToInputView();
     if (!restarting) setNavBarColor();
     setCandidatesViewShown(!Rime.isEmpty()); // 軟鍵盤出現時顯示候選欄
+
+    switch (attribute.inputType & InputType.TYPE_MASK_VARIATION) {
+      case InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS:
+      case InputType.TYPE_TEXT_VARIATION_PASSWORD:
+      case InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD:
+      case InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS:
+      case InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD:
+        Timber.i(
+            "EditorInfo: private;"
+                + " packageName"
+                + attribute.packageName
+                + "; fieldName"
+                + attribute.fieldName
+                + "; actionLabel"
+                + attribute.actionLabel
+                + "; inputType"
+                + attribute.inputType
+                + "; &v "
+                + (attribute.inputType & InputType.TYPE_MASK_VARIATION)
+                + "; &c "
+                + (attribute.inputType & InputType.TYPE_MASK_CLASS));
+        normalTextEditor = false;
+        break;
+
+      default:
+        Timber.i(
+            "EditorInfo: normal;"
+                + " packageName"
+                + attribute.packageName
+                + "; fieldName"
+                + attribute.fieldName
+                + "; actionLabel"
+                + attribute.actionLabel
+                + "; inputType"
+                + attribute.inputType
+                + "; &v "
+                + (attribute.inputType & InputType.TYPE_MASK_VARIATION)
+                + "; &c "
+                + (attribute.inputType & InputType.TYPE_MASK_CLASS));
+        normalTextEditor = true;
+        activeEditorInstance.cacheDraft();
+        addDraft();
+    }
   }
 
   @Override
   public void onFinishInputView(boolean finishingInput) {
+    if (normalTextEditor) addDraft();
     super.onFinishInputView(finishingInput);
     // Dismiss any pop-ups when the input-view is being finished and hidden.
     mainKeyboardView.closing();
@@ -1013,6 +1063,7 @@ public class Trime extends LifecycleInputMethodService {
    */
   private boolean performEnter(int keyCode) { // 回車
     if (keyCode == KeyEvent.KEYCODE_ENTER) {
+      activeEditorInstance.cacheDraft();
       if (textInputManager.getPerformEnterAsLineBreak()) {
         commitText("\n");
       } else {
@@ -1145,8 +1196,9 @@ public class Trime extends LifecycleInputMethodService {
     final Config imeConfig = getImeConfig();
     clipBoard.addPrimaryClipChangedListener(
         () -> {
-          if (imeConfig.getClipboardMaxSize() != 0) {
+          if (imeConfig.getClipboardLimit() != 0) {
             final ClipData clipData = clipBoard.getPrimaryClip();
+            if (clipData == null) return;
             final ClipData.Item item = clipData.getItemAt(0);
             if (item == null) return;
 
@@ -1161,5 +1213,20 @@ public class Trime extends LifecycleInputMethodService {
             }
           }
         });
+  }
+
+  private String draftString = "", draftCache = "";
+
+  private void addDraft() {
+    draftCache = activeEditorInstance.getDraftCache();
+    if (draftCache.isEmpty() || draftCache.trim().equals(draftString)) return;
+
+    if (getImeConfig().getDraftLimit() != 0) {
+      Timber.i("addDraft() cache=%s, string=%s", draftString, draftCache);
+      if (StringUtils.mismatch(draftCache, getImeConfig().getDraftOutput())) {
+        draftString = draftCache.trim();
+        liquidKeyboard.addDraftData(draftCache);
+      }
+    }
   }
 }
